@@ -139,6 +139,31 @@ export function generate<T>(observer: Observer<Object>, invertible = false): Ope
   return temp;
 }
 
+  function deepEquals(x, y) {
+  if (x === y) {
+    return true;
+  }
+  else if ((typeof x == "object" && x != null) && (typeof y == "object" && y != null)) {
+    if (Object.keys(x).length != Object.keys(y).length)
+      return false;
+
+    for (var prop in x) {
+      if (y.hasOwnProperty(prop))
+      {  
+        if (! deepEquals(x[prop], y[prop]))
+          return false;
+      }
+      else
+        return false;
+    }
+    
+    return true;
+  }
+  else 
+    return false;
+}
+
+
 // Dirty check if obj is different from mirror, generate patches and update mirror
 function _generate(mirror, obj, patches, path, invertible) {
   if (obj === mirror) {
@@ -160,19 +185,30 @@ function _generate(mirror, obj, patches, path, invertible) {
     var key = oldKeys[t];
     var oldVal = mirror[key];
 
-    if (hasOwnProperty(obj, key) && !(obj[key] === undefined && oldVal !== undefined && Array.isArray(obj) === false)) {
+    if (hasOwnProperty(obj, key) && !(obj[key] === undefined && oldVal !== undefined)) {
       var newVal = obj[key];
 
       if (typeof oldVal == "object" && oldVal != null && typeof newVal == "object" && newVal != null && Array.isArray(oldVal) === Array.isArray(newVal)) {
-        _generate(oldVal, newVal, patches, path + "/" + escapePathComponent(key), invertible);
+        if (Array.isArray(oldVal) ) {
+            _generate(oldVal, newVal, patches, path + "/" + escapePathComponent(key), invertible);
+        } else if (deepEquals(oldVal, newVal)) {
+          continue;
+        } else {
+          patches.push({ op: "remove", path: path + "/" + escapePathComponent(key)});
+          deleted = true;
+          patches.push({ op: "add", path: path + "/" + escapePathComponent(key), value: _deepClone(newVal) });
+        }
+        //_generate(oldVal, newVal, patches, path + "/" + escapePathComponent(key), invertible);
       }
       else {
         if (oldVal !== newVal) {
-          changed = true;
+          //changed = true;
           if (invertible) {
             patches.push({ op: "test", path: path + "/" + escapePathComponent(key), value: _deepClone(oldVal) });
       	  }
-          patches.push({ op: "replace", path: path + "/" + escapePathComponent(key), value: _deepClone(newVal) });
+          patches.push({ op: "remove", path: path + "/" + escapePathComponent(key)});
+          deleted = true;
+          patches.push({ op: "add", path: path + "/" + escapePathComponent(key), value: _deepClone(newVal) });
         }
       }
     }
@@ -186,8 +222,11 @@ function _generate(mirror, obj, patches, path, invertible) {
       if (invertible) {
         patches.push({ op: "test", path, value: mirror });
       }
-      patches.push({ op: "replace", path, value: obj });
-      changed = true;
+      patches.push({ op: "remove", path: path});
+      deleted = true;
+      patches.push({ op: "add", path: path, value: obj });
+      //patches.push({ op: "replace", path, value: obj });
+      //deleted = true;
     }
   }
 
